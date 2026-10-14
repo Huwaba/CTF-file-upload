@@ -36,4 +36,8 @@ ls -d ctf-* rogue-* alibi-* 2>/dev/null
 11. Run it
     cd ~/rogueap-ctf
     sudo ./start.sh
+
+--------------------------
+SCANNER
+--------------------------
      
