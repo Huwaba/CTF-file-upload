@@ -1,3 +1,4 @@
+cat > scripts/rebroadcast.py << 'EOF'
 #!/usr/bin/env python3
 import os, time
 from scapy.all import RadioTap, Dot11, Dot11Beacon, Dot11Elt, sendp
@@ -30,3 +31,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+EOF
