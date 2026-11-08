@@ -1,0 +1,94 @@
+cat > scripts/detect.py << 'EOF'
+#!/usr/bin/env python3
+import os, sys, time, threading, subprocess
+from collections import defaultdict
+from scapy.all import sniff, Dot11, Dot11Beacon, Dot11Elt
+
+IFACE = os.environ.get("MON_IFACE", "wlan0mon")
+CHANNELS = [int(c) for c in os.environ.get("CHANNELS", "1,2,3,4,5,6,7,8,9,10,11").split(",")]
+ALERT_THRESHOLD = int(os.environ.get("ALERT_THRESHOLD", 1))
+WINDOW_SECONDS = int(os.environ.get("WINDOW_SECONDS", 20))
+LOG_FILE = os.environ.get("LOG_FILE", "logs/detector.log")
+
+# ssid -> { bssid: last_seen_timestamp }
+sightings = defaultdict(dict)
+alerted = set()
+stop_hopping = False
+
+def log(msg):
+    print(msg)
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+
+def hop_channels():
+    while not stop_hopping:
+        for ch in CHANNELS:
+            if stop_hopping:
+                break
+            subprocess.run(["iw", "dev", IFACE, "set", "channel", str(ch)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.5)
+
+def prune(ssid, now):
+    for bssid in list(sightings[ssid].keys()):
+        if now - sightings[ssid][bssid] > WINDOW_SECONDS:
+            del sightings[ssid][bssid]
+    if not sightings[ssid]:
+        del sightings[ssid]
+        alerted.discard(ssid)
+
+def get_ssid(pkt):
+    elt = pkt.getlayer(Dot11Elt)
+    while elt:
+        if elt.ID == 0:
+            try:
+                return elt.info.decode(errors="ignore")
+            except Exception:
+                return None
+        elt = elt.payload.getlayer(Dot11Elt)
+    return None
+
+def handle_packet(pkt):
+    if not pkt.haslayer(Dot11Beacon):
+        return
+    bssid = pkt[Dot11].addr2
+    ssid = get_ssid(pkt)
+    if not bssid or not ssid:
+        return
+
+    now = time.time()
+    sightings[ssid][bssid] = now
+    prune(ssid, now)
+
+    bssid_count = len(sightings[ssid])
+    if bssid_count > ALERT_THRESHOLD and ssid not in alerted:
+        alerted.add(ssid)
+        log(f"\n[!] ALERT: SSID '{ssid}' is being broadcast by {bssid_count} different BSSIDs "
+            f"within {WINDOW_SECONDS}s:")
+        for b in sightings[ssid]:
+            log(f"      - {b}")
+        log("")
+
+def main():
+    global stop_hopping
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    log(f"[*] Detector started on {IFACE}, hopping channels {CHANNELS}")
+    log(f"[*] Threshold: >{ALERT_THRESHOLD} BSSIDs per SSID within {WINDOW_SECONDS}s window\n")
+
+    hopper = threading.Thread(target=hop_channels, daemon=True)
+    hopper.start()
+
+    try:
+        sniff(iface=IFACE, prn=handle_packet, store=False)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_hopping = True
+        log("\n[*] Detector stopped.")
+
+if __name__ == "__main__":
+    main()
+EOF
