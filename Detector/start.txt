@@ -15,7 +15,7 @@ echo "[*] Enabling monitor mode on $IFACE..."
 sudo airmon-ng check kill
 sudo airmon-ng start "$IFACE"
 
-export MON_IFACE CHANNELS ALERT_THRESHOLD WINDOW_SECONDS LOG_FILE
+export MON_IFACE CHANNELS WATCHED_SSID LOG_FILE
 
 echo "[*] Starting detector..."
 sudo -E python3 scripts/detect.py
