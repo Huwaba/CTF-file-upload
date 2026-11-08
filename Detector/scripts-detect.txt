@@ -1,17 +1,13 @@
 cat > scripts/detect.py << 'EOF'
 #!/usr/bin/env python3
 import os, sys, time, threading, subprocess
-from collections import defaultdict
 from scapy.all import sniff, Dot11, Dot11Beacon, Dot11Elt
 
 IFACE = os.environ.get("MON_IFACE", "wlan0mon")
 CHANNELS = [int(c) for c in os.environ.get("CHANNELS", "1,2,3,4,5,6,7,8,9,10,11").split(",")]
-ALERT_THRESHOLD = int(os.environ.get("ALERT_THRESHOLD", 1))
-WINDOW_SECONDS = int(os.environ.get("WINDOW_SECONDS", 20))
+WATCHED_SSID = os.environ.get("WATCHED_SSID", "AirOrangeX")
 LOG_FILE = os.environ.get("LOG_FILE", "logs/detector.log")
 
-# ssid -> { bssid: last_seen_timestamp }
-sightings = defaultdict(dict)
 alerted = set()
 stop_hopping = False
 
@@ -32,14 +28,6 @@ def hop_channels():
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(0.5)
 
-def prune(ssid, now):
-    for bssid in list(sightings[ssid].keys()):
-        if now - sightings[ssid][bssid] > WINDOW_SECONDS:
-            del sightings[ssid][bssid]
-    if not sightings[ssid]:
-        del sightings[ssid]
-        alerted.discard(ssid)
-
 def get_ssid(pkt):
     elt = pkt.getlayer(Dot11Elt)
     while elt:
@@ -59,24 +47,15 @@ def handle_packet(pkt):
     if not bssid or not ssid:
         return
 
-    now = time.time()
-    sightings[ssid][bssid] = now
-    prune(ssid, now)
-
-    bssid_count = len(sightings[ssid])
-    if bssid_count > ALERT_THRESHOLD and ssid not in alerted:
-        alerted.add(ssid)
-        log(f"\n[!] ALERT: SSID '{ssid}' is being broadcast by {bssid_count} different BSSIDs "
-            f"within {WINDOW_SECONDS}s:")
-        for b in sightings[ssid]:
-            log(f"      - {b}")
-        log("")
+    if ssid == WATCHED_SSID and bssid not in alerted:
+        alerted.add(bssid)
+        log(f"\n[!] ALERT: Rogue SSID '{ssid}' detected from BSSID {bssid}\n")
 
 def main():
     global stop_hopping
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     log(f"[*] Detector started on {IFACE}, hopping channels {CHANNELS}")
-    log(f"[*] Threshold: >{ALERT_THRESHOLD} BSSIDs per SSID within {WINDOW_SECONDS}s window\n")
+    log(f"[*] Watching for rogue SSID: '{WATCHED_SSID}'\n")
 
     hopper = threading.Thread(target=hop_channels, daemon=True)
     hopper.start()
