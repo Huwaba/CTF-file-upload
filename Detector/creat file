@@ -1,0 +1,3 @@
+cd ~
+mkdir -p ~/rogueap-detector/scripts ~/rogueap-detector/logs
+cd ~/rogueap-detector
