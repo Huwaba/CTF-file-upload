@@ -1,3 +1,4 @@
+cat > start.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 source ./config.sh
@@ -19,3 +20,4 @@ export MON_IFACE CHANNEL ROGUE_BSSID ROGUE_SSID
 
 echo "[*] Starting rogue broadcast..."
 sudo -E python3 scripts/rebroadcast.py | tee -a logs/probe.log
+EOF
