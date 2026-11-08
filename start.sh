@@ -1,4 +1,3 @@
-cat > start.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 source ./config.sh
@@ -16,21 +15,7 @@ sudo airmon-ng check kill
 sudo airmon-ng start "$IFACE"
 sudo iw dev "$MON_IFACE" set channel "$CHANNEL"
 
-export MON_IFACE CHANNEL SCAN_DURATION PROBE_DURATION ROGUE_BSSID NETWORKS_FILE
+export MON_IFACE CHANNEL ROGUE_BSSID ROGUE_SSID
 
-while true; do
-    echo "============================================"
-    echo "[SCAN] Capturing real SSIDs/BSSIDs for ${SCAN_DURATION}s..."
-    echo "============================================"
-    sudo -E python3 scripts/scan_networks.py | tee -a logs/scan.log
-
-    echo ""
-    echo "============================================"
-    echo "[PROBE] Rebroadcasting cloned SSIDs for ${PROBE_DURATION}s..."
-    echo "============================================"
-    timeout "$PROBE_DURATION" sudo -E python3 scripts/rebroadcast.py | tee -a logs/probe.log
-
-    echo "[*] Cycle complete. Re-scanning..."
-    sleep 2
-done
-EOF
+echo "[*] Starting rogue broadcast..."
+sudo -E python3 scripts/rebroadcast.py | tee -a logs/probe.log
